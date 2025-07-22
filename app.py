@@ -1,26 +1,27 @@
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, jsonify
 import joblib
 import pandas as pd
 import openai
 import os
 import json
 from dotenv import load_dotenv
+from datetime import datetime
 
-# Load API keys
+# Load environment variables
 load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 openai.api_key = OPENAI_API_KEY
 
 app = Flask(__name__)
+model_data = None  # Cached model
 
-# Global model cache
-model_data = None
-
+# Load the trained model
 def load_models():
     global model_data
     if model_data is None:
         model_data = joblib.load("models/model.pkl")
 
+# Get list of teams from feature columns
 def get_teams():
     load_models()
     teams = set()
@@ -31,6 +32,7 @@ def get_teams():
             teams.add(col.replace("AwayTeam_", ""))
     return sorted(teams)
 
+# Predict outcome and stats for a game
 def predict_game(home_team, away_team):
     load_models()
     winner_model = model_data["winner_model"]
@@ -42,7 +44,7 @@ def predict_game(home_team, away_team):
     away_col = f"AwayTeam_{away_team}"
 
     if home_col not in input_data or away_col not in input_data:
-        return {"error": f"One or both teams ('{home_team}', '{away_team}') not found in training data."}
+        return {"error": f"One or both teams ('{home_team}', '{away_team}') not in training data."}
 
     input_data[home_col] = 1
     input_data[away_col] = 1
@@ -51,39 +53,43 @@ def predict_game(home_team, away_team):
     winner_pred = winner_model.predict(input_df)[0]
     winner = home_team if winner_pred == 1 else away_team
 
+    # Predict stats
     stats_predictions = {}
     for stat, model in regression_models.items():
-        pred_val = model.predict(input_df)[0]
-        stats_predictions[stat] = float(pred_val)
+        try:
+            stats_predictions[stat] = float(model.predict(input_df)[0])
+        except:
+            stats_predictions[stat] = None
 
+    # GPT breakdown
     stats_str = ", ".join(f"{k}={v:.2f}" for k, v in stats_predictions.items())
     prompt = (
-        f"Analyze the upcoming MLB game between {home_team} (home) and {away_team} (away). "
-        f"The model predicts the winner is {winner}. "
-        f"Predicted stats include: {stats_str}. "
-        "Explain why based on historical data, roster performance, and recent trends."
+        f"Analyze the MLB matchup between {home_team} (home) and {away_team} (away). "
+        f"Prediction: {winner} is expected to win. Predicted stats: {stats_str}. "
+        "Explain the reasoning considering history, roster strength, and strategy."
     )
 
     try:
         response = openai.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": "You are a helpful baseball analytics assistant who explains MLB predictions using advanced insights."},
+                {"role": "system", "content": "You are a helpful MLB sports analyst."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.7,
-            max_tokens=600,
+            max_tokens=600
         )
-        gpt_output = response.choices[0].message.content.strip()
+        gpt_analysis = response.choices[0].message.content.strip()
     except Exception as e:
-        gpt_output = f"OpenAI API error: {e}"
+        gpt_analysis = f"OpenAI error: {e}"
 
     return {
         "winner": winner,
         "stats": stats_predictions,
-        "analysis": gpt_output
+        "analysis": gpt_analysis
     }
 
+# Home Route (Prediction Page)
 @app.route("/", methods=["GET", "POST"])
 def index():
     prediction = None
@@ -112,6 +118,7 @@ def index():
                            away_team=away_team,
                            teams=teams)
 
+# Ask GPT Anything About MLB Stats
 @app.route("/ask", methods=["GET", "POST"])
 def ask():
     answer = None
@@ -122,30 +129,35 @@ def ask():
                 response = openai.chat.completions.create(
                     model="gpt-4o-mini",
                     messages=[
-                        {"role": "system", "content": "You are a helpful MLB analytics assistant."},
+                        {"role": "system", "content": "You are a helpful MLB stat assistant."},
                         {"role": "user", "content": question}
                     ],
                     temperature=0.7,
-                    max_tokens=600
+                    max_tokens=500
                 )
                 answer = response.choices[0].message.content.strip()
             except Exception as e:
-                answer = f"OpenAI API error: {e}"
+                answer = f"OpenAI error: {e}"
     return render_template("ask.html", answer=answer)
 
-@app.route("/live_data", methods=["GET"])
+# Live Game Polling Route
+@app.route("/live_data")
 def live_data():
-    import datetime
-    today = datetime.datetime.now().strftime("%Y-%m-%d")
+    today = datetime.now().strftime("%Y-%m-%d")
     path = f"data/live_games_{today}.json"
 
     if not os.path.exists(path):
-        return {"error": "No live data yet."}
+        return jsonify({"error": "No live data available yet."}), 404
 
     with open(path, "r") as f:
         data = json.load(f)
+    return jsonify({"games": data})
 
-    return {"games": data}
+# Optional About Route
+@app.route("/about")
+def about():
+    return render_template("about.html")
 
+# Start server
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5002, debug=True)

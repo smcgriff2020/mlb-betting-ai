@@ -1,121 +1,57 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <title>MLB AI Betting Predictor</title>
-  <style>
-    body { font-family: Arial, sans-serif; background: #f0f0f0; padding: 30px; }
-    .tabs { display: flex; margin-bottom: 20px; }
-    .tab-button {
-      padding: 10px 20px;
-      border: 1px solid #ccc;
-      background: #e0e0e0;
-      cursor: pointer;
-      margin-right: 5px;
-    }
-    .tab-button.active { background: #fff; font-weight: bold; }
-    .tab-content { background: #fff; padding: 20px; border: 1px solid #ccc; }
-    form { margin-bottom: 20px; }
-    select, button { padding: 10px; margin: 5px; }
-    .error { color: red; }
-  </style>
-</head>
-<body>
-  <h1>MLB Sports Betting AI Predictor</h1>
+{% extends "base.html" %}
+{% block content %}
+<h1 class="mb-4">MLB Sports Betting AI Predictor</h1>
 
-  {% if error %}
-    <div class="error">{{ error }}</div>
-  {% endif %}
+{% if error %}
+  <div class="alert alert-danger">{{ error }}</div>
+{% endif %}
 
-  <form method="POST" id="predict-form">
-    <label for="home_team">Home Team:</label>
-    <select name="home_team" required>
-      <option value="" disabled {% if not home_team %}selected{% endif %}>Select Home</option>
+<form method="POST" class="row g-3 mb-4">
+  <div class="col-md-5">
+    <label for="home_team" class="form-label">Home Team</label>
+    <select class="form-select" name="home_team" id="home_team" required>
+      <option value="" disabled selected>Select home team</option>
       {% for team in teams %}
         <option value="{{ team }}" {% if team == home_team %}selected{% endif %}>{{ team }}</option>
       {% endfor %}
     </select>
-
-    <label for="away_team">Away Team:</label>
-    <select name="away_team" required>
-      <option value="" disabled {% if not away_team %}selected{% endif %}>Select Away</option>
+  </div>
+  <div class="col-md-5">
+    <label for="away_team" class="form-label">Away Team</label>
+    <select class="form-select" name="away_team" id="away_team" required>
+      <option value="" disabled selected>Select away team</option>
       {% for team in teams %}
         <option value="{{ team }}" {% if team == away_team %}selected{% endif %}>{{ team }}</option>
       {% endfor %}
     </select>
+  </div>
+  <div class="col-md-2 d-flex align-items-end">
+    <button class="btn btn-primary w-100" type="submit">Predict</button>
+  </div>
+</form>
 
-    <button type="submit">Predict</button>
-  </form>
-
-  {% if prediction %}
-    <div class="tabs">
-      <div class="tab-button active" onclick="showTab('winner')">🏆 Winner</div>
-      <div class="tab-button" onclick="showTab('stats')">📊 Stats</div>
-      <div class="tab-button" onclick="showTab('analysis')">🧠 GPT Analysis</div>
-    </div>
-
-    <div id="winner" class="tab-content">
-      <h2>Predicted Winner: {{ prediction.winner }}</h2>
-    </div>
-
-    <div id="stats" class="tab-content" style="display:none;">
-      <h2>Predicted Stats:</h2>
-      <ul>
+{% if prediction %}
+  <div class="card shadow-sm">
+    <div class="card-body">
+      <h3 class="card-title">🏆 Predicted Winner: {{ prediction.winner }}</h3>
+      <h5 class="mt-3">📊 Predicted Stats:</h5>
+      <ul class="list-group mb-3">
         {% for stat, val in prediction.stats.items() %}
-          <li><strong>{{ stat }}:</strong> {{ "%.2f"|format(val) }}</li>
+          <li class="list-group-item d-flex justify-content-between">
+            <span>{{ stat }}</span>
+            <strong>{{ "%.2f"|format(val) }}</strong>
+          </li>
         {% endfor %}
       </ul>
-    </div>
-
-    <div id="analysis" class="tab-content" style="display:none;">
-      <h2>AI Analysis:</h2>
+      <h5 class="mt-3">🤖 OpenAI GPT Analysis:</h5>
       <p>{{ prediction.analysis }}</p>
     </div>
-  {% endif %}
-
-  <script>
-    function showTab(tab) {
-      const tabs = ['winner', 'stats', 'analysis'];
-      tabs.forEach(id => {
-        document.getElementById(id).style.display = id === tab ? 'block' : 'none';
-        document.querySelector(`.tab-button[onclick="showTab('${id}')"]`).classList.toggle("active", id === tab);
-      });
-    }
-
-    // Auto-refresh predictions every 90 seconds
-    setInterval(() => {
-      const form = document.getElementById("predict-form");
-      if (form) form.submit();
-    }, 90000);
-  </script>
-</body>
-</html>
-<h2>📺 Live MLB Games</h2>
-<div id="live-games">Loading...</div>
+  </div>
+{% endif %}
 
 <script>
-function fetchLiveGames() {
-  fetch("/live_data")
-    .then(res => res.json())
-    .then(data => {
-      const container = document.getElementById("live-games");
-      if (data.error) {
-        container.innerHTML = "<p>" + data.error + "</p>";
-        return;
-      }
-
-      let html = "<ul>";
-      data.games.forEach(game => {
-        html += `<li><strong>${game.AwayTeam} @ ${game.HomeTeam}</strong><br>Status: ${game.Status}, Score: ${game.AwayTeamRuns ?? 0} - ${game.HomeTeamRuns ?? 0}</li>`;
-      });
-      html += "</ul>";
-      container.innerHTML = html;
-    })
-    .catch(err => {
-      document.getElementById("live-games").innerHTML = "❌ Error loading live data.";
-    });
-}
-
-setInterval(fetchLiveGames, 60000); // ⏱ Refresh every 60 seconds
-fetchLiveGames(); // Initial call
+  setInterval(() => {
+    document.querySelector('form').submit();
+  }, 60000); // ⏱ Auto-refresh every 60s
 </script>
+{% endblock %}

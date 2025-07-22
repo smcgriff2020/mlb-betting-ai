@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="mb-4">🔴 Live MLB Games</h1>
+<div id="live-container">
+  <p>Loading live game data...</p>
+</div>
+
+<script>
+  async function fetchLiveGames() {
+    const res = await fetch("/live_data");
+    const data = await res.json();
+
+    const container = document.getElementById("live-container");
+    if (data.error) {
+      container.innerHTML = `<div class="alert alert-warning">${data.error}</div>`;
+    } else {
+      const games = data.games;
+      if (games.length === 0) {
+        container.innerHTML = "<p>No live games currently.</p>";
+      } else {
+        container.innerHTML = games.map(game => `
+          <div class="card mb-3">
+            <div class="card-body">
+              <h5>${game.strHomeTeam} vs ${game.strAwayTeam}</h5>
+              <p><strong>Score:</strong> ${game.intHomeScore} - ${game.intAwayScore}</p>
+              <p><strong>Round:</strong> ${game.intRound || 'N/A'} | <strong>Spectators:</strong> ${game.intSpectators || 'N/A'}</p>
+            </div>
+          </div>
+        `).join('');
+      }
+    }
+  }
+
+  fetchLiveGames();
+  setInterval(fetchLiveGames, 30000); // Refresh every 30 seconds
+</script>
+{% endblock %}
