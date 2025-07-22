@@ -5,3 +5,4 @@ joblib
 python-dotenv
 openai
 requests
+gunicorn
